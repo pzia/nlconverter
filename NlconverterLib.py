@@ -11,6 +11,7 @@ import email.mime.base
 import email.header
 import mimetypes
 from email import encoders
+from email.Utils import formatdate
 
 import re #in order to parse addresses
 import tempfile #required for dealing with attachment
@@ -24,13 +25,8 @@ import time
 import mailbox
 
 #Regexp
+reGenericAddressNotes = re.compile(r'CN=(.*?)\/OU=(\w*?)\/O=(\w*)', re.IGNORECASE)
 
-# Example : addressNotesDomainTable =  { 'oldname.com' : 'newname.fr', }
-addressNotesDomainTable =  { }
-reGenericAddressNotes = re.compile(r'CN=(.*?)\s+(.*?)\/(.*?)O=(\w*?)\/C=(\w*)', re.IGNORECASE)
-reOU = re.compile(r'OU=(\w+?)\/', re.IGNORECASE)
-reAddressMail = re.compile(r'([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,6})', re.IGNORECASE)
-#this list should be extended to match regular install path
 notesDllPathList = ['c:/notes', 'd:/notes']
 
 def registerNotesDll():
@@ -71,7 +67,7 @@ class NotesDocumentReader(object):
 
     def debug(self, doc):
         """Debug method : print message identifiers"""
-        self.debugItems(doc, ["Subject", "From", "To", "PostedDate", "DeliveredDate"])
+        self.debugItems(doc, ["Subject", "From", "Principal", "InetFrom", "To", "PostedDate", "DeliveredDate"])
 
     def debugItems(self, doc, itemlist):
         """Generic debug method"""
@@ -87,20 +83,9 @@ class NotesDocumentReader(object):
         """Convert Notes Address Name Space into emails"""
         res = reGenericAddressNotes.search(value)
         if res == None:
-            res = reAddressMail.search(value)
-            if res == None:
                 return value.lower()
-            else :
-                return res.group(1)
         else :
-            mail = u"%s.%s@" % ( res.group(1).lower(), res.group(2).lower() )
-            subs = reOU.findall(res.group(3))
-            subs += res.groups()[3:]
-            suffix = ('.'.join(subs)).lower()
-            if addressNotesDomainTable.has_key(suffix):
-                suffix = addressNotesDomainTable[suffix]
-            mail += suffix
-            return mail.lower()
+                return res.group(1)
 
     def listAttachments(self, doc):
         """Return the list of the attachments, striping None and void names"""
@@ -122,9 +107,12 @@ class NotesDocumentReader(object):
         a.ExtractFile(self.tempname)
         return self.tempname
 
-    def dateitem2datetime(self, doc, itemname):
-        datetuple = time.gmtime(int(self.get1(doc, itemname)) )[:5]
-        return datetime.datetime(*datetuple )
+    def dateitem2datetime2string2header(self, doc, itemname):
+        try:
+            datetuple = time.gmtime(int(self.get1(doc, itemname)) )[:5]
+        except Exception as e:
+            print self.debug(doc)
+        return self.stringToHeader(formatdate(time.mktime(datetime.datetime(*datetuple ).timetuple())), charset='ascii')
 
     def log(self, message = ""):
         print message
@@ -196,7 +184,7 @@ class NotesToIcalConverter(NotesDocumentConverter):
 
 class NotesToMimeConverter(NotesDocumentConverter):
     """Convert a Memo Document to a Mime Message"""
-    charset = 'iso-8859-15' #default charset
+    charset = 'utf-8' #default charset
     charsetAttachment = 'utf-8' #attachment filename charset. Because Linux and Windows seems to use Utf-8 for filenames...
     
     def stringToHeader(self, value):
@@ -206,21 +194,36 @@ class NotesToMimeConverter(NotesDocumentConverter):
     def header(self, doc, itemname):
         return self.stringToHeader(self.get1(doc, itemname))
     
-    def addressHeader(self, doc, item):
-        items = self.get(doc, item)
-        return self.stringToHeader(",".join(map(self.matchAddress, items)))
-    
+    def toCcBccHeader(self, doc, headerType):
+        firstHeaders = map(self.matchAddress, self.get(doc, headerType))
+        secondHeaders = self.get(doc, "Inet" + headerType)
+        allHeaders = ",".join(tuple(a+" <" + b + ">" if (b!=u'' and b!=u'.') else a for a, b in zip(firstHeaders, secondHeaders)))
+        return self.stringToHeader(allHeaders)
+
+    def fromHeader(self, doc):
+        fromHeader = self.matchAddress(self.get1(doc, "From"))
+        principalHeader =self.matchAddress(self.get1(doc, "Principal"))
+        emailFromHeader = self.get1(doc, "InetFrom")
+
+        allFrom = fromHeader
+        if emailFromHeader != u'' and emailFromHeader != u'.':
+            allFrom += " <" + emailFromHeader + ">"
+        if not (fromHeader == principalHeader or principalHeader == u''):
+            allFrom = principalHeader + " (" + allFrom + ")"
+
+        return self.stringToHeader(allFrom)
+
     def messageHeaders(self, doc, m):
         m['Subject'] = self.header(doc, "Subject")
-        m['From'] = self.addressHeader(doc, "From")
-        m['To'] = self.addressHeader(doc, "sendto")
-        m['Cc'] = self.addressHeader(doc, "copyto")
-        m['Date'] = self.get1(doc, "PostedDate")
+        m['From'] = self.fromHeader(doc)
+        m['To'] = self.toCcBccHeader(doc, "Sendto")
+        m['Cc'] = self.toCcBccHeader(doc, "Copyto")
+        m['Date'] = self.dateitem2datetime2string2header(doc, "PostedDate")
         if m['Date'] == u'':
-            m['Date'] = self.get1(doc, "DeliveredDate")
-        ccc = self.addressHeader(doc, "BlindCopyTo")
+            m['Date'] = self.dateitem2datetime2string2header(doc, "DeliveredDate")
+        ccc = self.toCcBccHeader(doc, "BlindCopyTo")
         if ccc != u'':
-            m['Ccc'] = ccc
+            m['Bcc'] = ccc
         m['User-Agent'] = self.header(doc, "$Mailer")
         m['Message-ID'] = self.header(doc, "$MessageID")
 
