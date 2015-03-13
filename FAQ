@@ -1,0 +1,52 @@
+*Frequently asked questions for nlconverter*
+
+= Precompiled binary usage =
+
+== Convert ==
+  * unzip
+  * launch "Gui.exe"
+  * give the path of nsf source file.
+  * give the destination file for mbox
+  * your notes password
+  * Click check one time. Nlconverter is going to check the dll registration, and autoregister. If necessary, recheck one more time.
+  * Click convert button once available.
+  * Progress of convert is displayed in the title bar, errors are displayed in the window.
+
+== usage in thunderbird ==
+  * put the generated file into the Mail/Local Folders/ directory
+  * restart thunderbird
+  * first view of the folder may take some time because of pre-indexation.
+
+= Source usage (Basics) =
+
+== Prerequisites ==
+
+  * Install python 2.6 for windows
+  * Install pywin 2.6 for windows
+  * (optional) register the right dll : "regsvr32 c:\notes\nlsxbe.dll"
+
+== How to use it ? ==
+
+  * Fix the notesPasswd and notesNsfPath in the script
+  * Open the 'Cmd' command line
+    * SET PATH=%PATH%;C:\Python26
+    * (will be easier in the future)
+    *   python notes2mbox.py 
+
+
+  * a .mbox suffixed file is created
+  * copy it in the right place for your mbox client
+
+== Does it works on Linux ? ==
+
+Oviously not, because nlconverter use the COM API to access Lotus Notes internals. Maybe it's possible to make it work with Wine, but nobody did try at this time...
+
+Of course, once converted, you can use the mbox in whatever OS you want ;)
+
+= Advanced =
+
+= Your Questions =
+
+== Can I add a question here ? ==
+
+Yes, you can ;) . Just add a your question here.
